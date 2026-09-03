@@ -1,0 +1,45 @@
+# Uni-Mol on the GPU.
+#
+# Identical to `Containerfile` except for where torch comes from. The CPU tier installs it
+# from PyTorch's cpu index; here it comes from PyPI, whose torch 2.1.2 wheel *is* the cu121
+# build and carries its own nvidia runtime. That covers sm_86 natively and sm_89 by JIT, so
+# both the cluster A4000 and the local Ada card work.
+#
+# Nothing else may change. This image has to reproduce the CPU tier's recorded numbers
+# and its encoder-contract test
+# before it is trusted, so any library drift here would defeat the point of having two tiers.
+FROM docker.io/library/python:3.10-slim
+
+ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# -f, not --index-url: the latter confines pip to PyTorch's index, and build dependencies
+# (flit_core here) then have nowhere to come from. This keeps PyPI as the primary index.
+RUN pip install --no-cache-dir torch==2.1.2
+
+# Uni-Core is a fairseq-style training framework; the model class inherits from it, so it is
+# needed even to instantiate a model, not only to train one.
+RUN pip install --no-cache-dir --no-build-isolation \
+    git+https://github.com/dptech-corp/Uni-Core.git
+
+RUN pip install --no-cache-dir \
+    rdkit \
+    "numpy<2" \
+    scipy \
+    pandas \
+    tqdm \
+    ml-collections \
+    lmdb \
+    # not in their requirements.txt, but unimol/losses/cross_entropy.py imports it and the
+    # model package pulls the losses in on import
+    scikit-learn
+
+RUN python -c "import torch, unicore; from unicore.models import BaseUnicoreModel; \
+print('env ok', torch.__version__, 'cuda', torch.version.cuda)"
+
+WORKDIR /work
+COPY . /work
+RUN cd /work/unimol && python -c "import sys; sys.path.insert(0,'.'); \
+from unimol.models.unimol import UniMolModel; print('unimol imports ok')"
