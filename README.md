@@ -1,3 +1,17 @@
+<!-- gnn-benchmark:begin -->
+# Running this in gnn-benchmark
+
+**Not registered as a variant.** Uni-Mol has no adapter here, so it can declare no capability,
+and `gnnb doctor` is right to refuse a variant that promises one. It is also the one model
+deliberately left on its original stack — it depends on `unicore`, and porting it was judged
+not worth the effort against what it would add.
+
+The encoder boundary, for when there is something to run, is in [CLAUDE.md](CLAUDE.md).
+
+<!-- gnn-benchmark:end -->
+
+---
+
 Official Repository for the Uni-Mol Series Methods
 ==================================================
 
