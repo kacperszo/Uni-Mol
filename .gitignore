@@ -127,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Published checkpoints. Fetched, not versioned: 780 MB across three files, and all three are
+# downloads from the authors rather than anything derived here.
+#   mol_pre_no_h_220816.pt   182 MB  ligand encoder, pretrained alone
+#   pocket_pre_220816.pt     182 MB  pocket encoder, pretrained alone
+#   binding_pose_220908.pt   416 MB  both encoders plus the joint concat_decoder, trained on
+#                                    complexes — the only one that holds the authors' own way
+#                                    of putting the two sides together
+weights/
+*.pt
