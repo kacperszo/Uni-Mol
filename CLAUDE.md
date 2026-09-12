@@ -149,3 +149,32 @@ So what remains:
 3. **Train the joint decoder ourselves**, initialised from `mol_pre_no_h_220816.pt` and
    `pocket_pre_220816.pt`. That was always the plan for this model; it is now also the only way it
    runs.
+
+## The pocket *pretraining* recipe is in the repo, unlike the pose data
+
+And this is the part worth having, because it is what this project is actually building towards.
+`unimol/README.md:164` carries the command that produced `pocket_pre_220816.pt`, with every
+hyperparameter:
+
+    --task unimol_pocket --loss unimol --arch unimol_base --dict-name dict_coarse.txt
+    --masked-token-loss 1 --masked-coord-loss 1 --masked-dist-loss 1
+    --x-norm-loss 0.01 --delta-pair-repr-norm-loss 0.01
+    --mask-prob 0.15 --noise-type uniform --noise 1.0
+    adam (0.9, 0.99) eps 1e-6, clip-norm 1.0, wd 1e-4, lr 1e-4
+    polynomial_decay, 10000 warmup, 1e6 total updates, batch 16, fp16
+
+A self-supervised objective over protein pockets — masked atom type, masked coordinate and masked
+distance, with two representation-norm regularisers — and the dictionary is `dict_coarse.txt`,
+which is in the repo and which we already confirmed matches the checkpoint's 10-token embedding
+table.
+
+**Its input is four fields, not an annotation.** `tasks/unimol_pocket.py` reads an LMDB of
+`pdbid`, `atoms`, `coordinates`, `residue`. Nothing keyed to a preprocessed copy of anything: a
+list of heavy atoms, their coordinates and their residue labels, which is derivable from any
+structure we hold. So unlike the pose task, **this one is reproducible from the repo**, and the only
+choice left to us is which pockets to pretrain on — which for this programme was always going to be
+our own data anyway.
+
+That makes Uni-Mol's standing here precise: its *finetuning* story is unreproducible and dropped,
+while its *pretraining* story is a published, complete, self-supervised recipe for a 99%-of-
+parameters encoder. The second is why the model is in the roster.
