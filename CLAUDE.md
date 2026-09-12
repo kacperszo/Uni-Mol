@@ -51,57 +51,31 @@ representation, pocket-pocket from the pocket's, the cross blocks left at zero �
 four-layer `TransformerEncoderWithPair` over the result. Nothing about the joining has to be
 invented.
 
-## Running their pose checkpoint needs an annotation that does not transfer to our data
+## Why there is no `predict` or `embed` yet
 
-Settled 2026-09-12. This is the reason Uni-Mol is a **training** target here rather than a
-reproduction one. The claim is deliberately narrower than the first version of this section, which
-over-reached from two samples and was corrected by measuring all 285 — see the end.
+Running `binding_pose_220908.pt` needs a pocket, and the pocket is not computed — it is read from
+`casf2016.pocket.json`, shipped in `CASF-2016.tar.gz` on their v0.1 release, as a per-complex list
+of `chain_id + residue_number`. Their loader says it cannot derive one locally.
 
-Running `binding_pose_220908.pt` needs a pocket, and the pocket is not computed: it is read from
-`casf2016.pocket.json`, a per-complex list of `chain_id + residue_number` strings shipped in
-`CASF-2016.tar.gz` on their v0.1 release. Their own loader is explicit about the limitation —
-*"Currently not support parsing pdb and pocket info from local files."*
+That annotation is keyed to their copy of the structures. Against the canonical CASF core set:
+**12 of 285** pockets match zero residues, **35** start at a different residue number, and **19**
+have the same ATOM count. So it needs a per-complex audit of the mapping before it can be used,
+and their structures are not an alternative — every other model here is scored on one canonical
+copy of CASF, and we cannot redistribute theirs.
 
-**That annotation is keyed to their copy of the structures, and their copy is not ours.** Measured
-across all 285:
+**So Uni-Mol is a training target, not a reproduction one**, and the pocket selection will be ours.
+Choose it by measurement: `CroppingPocketDockingPoseDataset` caps a pocket at 256 atoms and
+**randomly samples above that**, so an overshoot makes inference stochastic. Whole residues within
+a radius of any ligand atom, heavy atoms only, over the core set:
 
-| | |
-|---|---|
-| files with the same number of ATOM records as the canonical CASF file | **19 of 285** |
-| files whose first residue number differs from ours | **35 of 285** |
-| pockets that match **zero** residues when applied to canonical structures | **12 of 285** |
+| selection | median atoms | over the cap |
+|---|---|---|
+| CASF's `_pocket.pdb` (10 A) | 390 | 274 of 285 |
+| within 6 A | 229 | 97 |
+| within 5 A | 166 | 16 |
+| within 4 A | 137 | 3 |
 
-So the annotation cannot be applied blindly. For the 12 it fails visibly; for the 35 whose
-numbering starts elsewhere it is suspect and would need checking one complex at a time; for the
-remaining 250 the numbering starts at the same residue and probably lines up, though a shared
-starting number does not by itself guarantee the same numbering throughout.
-
-Using it properly therefore means auditing the mapping per complex. That is a tractable job — and
-it is bookkeeping about their preprocessing rather than progress on the question this project is
-asking, so it was not done. We also cannot redistribute CASF-2016 ourselves, so their structures
-are not an option for this benchmark even where they would work: every other model here is scored
-on one canonical copy, and a model scored on a different one does not belong in the same table.
-
-**What stands**, because none of it depends on their preprocessing: the architecture, the way the
-two sides are joined (`models/docking_pose.py`, in this repo), both pretrained encoders, the
-dictionaries, and the encoder boundary their authors designed. We train the head ourselves, which
-was always the plan, and our pocket selection is declared as ours.
-
-### Two claims withdrawn, and how
-
-The first version of this section said the residues were "renumbered from 1" and that coordinates
-"differ in the third decimal", and concluded that the 273 non-zero-overlap complexes were *worse*
-than the 12 because their pockets would be built from the wrong atoms. All three came from
-inspecting `4jia` and `2v7a`, which turned out to be in the 35-complex tail rather than typical.
-
-Measuring all 285: their first residue is 1 in only **82** of them, and matches ours in **250**.
-The coordinate claim came from comparing the first ATOM line of each file — one atom — and a
-proper comparison is confounded anyway, because the atom ordering differs between the two copies,
-which makes an element-wise difference meaningless (it reads 9 A at the median for the 19 files
-with matching atom counts).
-
-The conclusion survives; the reasoning for it did not. Worth keeping as a reminder that two
-samples out of 285 are a hypothesis.
+No radius clears it for all 285, so this is a recorded trade rather than a default.
 
 ## Hard-won facts (do NOT regress these)
 
@@ -125,52 +99,26 @@ podman run --rm --network=none -v <weights>:/ckpt:ro localhost/unimol:latest \
   sh -c "cd /tmp && python /work/test_encoder_transfer.py --checkpoint /ckpt/mol_pre_no_h_220816.pt"
 ```
 
-## Next
+## What is left to build
 
-Both open questions from the previous round are now closed, and not in the direction expected.
-
-1. ~~Needs the ligand/pocket combination decided first.~~ **It does not.** The combination is in
-   the repo — `models/docking_pose.py` concatenates the two token sequences and runs a four-layer
-   `TransformerEncoderWithPair` over them with a block attention bias. Nothing to invent.
-2. ~~Check `binding_pose_220908.pt` for the authors' own way of joining the two sides.~~ Checked.
-   It holds 450 tensors and 108,780,492 parameters: `mol_model` 193, `pocket_model` 193,
-   `concat_decoder` 54, plus 10 in the two pose heads. The architecture config comes out of the
-   shapes — 512 embedding dimensions, 64 attention heads — and the checkpoint opens under
-   `weights_only=True`. What it cannot do is run, because the pocket annotation it needs is keyed
-   to a preprocessed copy of CASF-2016 rather than to the canonical one.
-
-So what remains:
-
-1. **Our own pocket selection, declared as ours.** Theirs is not reproducible from what is
-   published, so this is a choice we have to make and should make by measurement rather than by
-   default — `CroppingPocketDockingPoseDataset` caps a pocket at 256 atoms and **randomly samples**
-   above that, so a selection that overshoots makes inference stochastic. Measured on the
-   canonical CASF core set, whole residues within a radius of any ligand atom, heavy atoms only:
-
-   | selection | median atoms | over the 256 cap |
-   |---|---|---|
-   | CASF's own `_pocket.pdb` (10 A) | 390 | 274 of 285 |
-   | residues within 6 A | 229 | 97 of 285 |
-   | residues within 5 A | 166 | 16 of 285 |
-   | residues within 4 A | 137 | 3 of 285 |
-
-   No radius clears the cap for all 285, so the choice is a trade and has to be recorded as one.
-   For reference, their own annotation has a median of 28 residues — roughly half of CASF's
-   pocket — which is why the cap makes sense in their pipeline and not in ours.
-
-2. **An entry script and an adapter**, for `embed` and then `train`. The featurisation is the work:
+1. **An entry script and an adapter**, for `embed` then `train`. The featurisation is the work:
    atom tokens plus coordinates per side, the dictionaries from `example_data` with `[MASK]`
-   appended as `tasks/docking_pose.py:93` does, and the crystal ligand pose rather than the
-   thousand generated conformers the docking demo clusters — the same decision already taken and
-   documented for EquiBind's embedding path.
+   appended as `tasks/docking_pose.py:93` does — giving 31 and 10, which matches the checkpoint's
+   embedding tables — and the crystal ligand pose rather than the thousand conformers the docking
+   demo generates and clusters.
+2. **Our pocket selection**, declared as ours, from the table above.
+3. **Train the joint decoder**, initialised from `mol_pre_no_h_220816.pt` and
+   `pocket_pre_220816.pt`.
 
-3. **Train the joint decoder ourselves**, initialised from `mol_pre_no_h_220816.pt` and
-   `pocket_pre_220816.pt`. That was always the plan for this model; it is now also the only way it
-   runs.
+Nothing here needs inventing the combination of the two sides: `models/docking_pose.py` does it —
+concatenate the token sequences, build a block attention bias (ligand-ligand from the ligand pair
+representation, pocket-pocket from the pocket's, cross blocks zero), run a four-layer
+`TransformerEncoderWithPair`. `binding_pose_220908.pt` holds trained weights for exactly that:
+450 tensors, 108,780,492 parameters, 512 embedding dimensions and 64 attention heads read off the
+shapes, and it opens under `weights_only=True`.
 
-## The pocket *pretraining* recipe is in the repo, unlike the pose data
+## The pocket pretraining recipe, which is reproducible
 
-And this is the part worth having, because it is what this project is actually building towards.
 `unimol/README.md:164` carries the command that produced `pocket_pre_220816.pt`, with every
 hyperparameter:
 
@@ -181,18 +129,11 @@ hyperparameter:
     adam (0.9, 0.99) eps 1e-6, clip-norm 1.0, wd 1e-4, lr 1e-4
     polynomial_decay, 10000 warmup, 1e6 total updates, batch 16, fp16
 
-A self-supervised objective over protein pockets — masked atom type, masked coordinate and masked
-distance, with two representation-norm regularisers — and the dictionary is `dict_coarse.txt`,
-which is in the repo and which we already confirmed matches the checkpoint's 10-token embedding
-table.
+Masked atom type, masked coordinate and masked distance, with two representation-norm
+regularisers. `tasks/unimol_pocket.py` reads an LMDB of four fields — `pdbid`, `atoms`,
+`coordinates`, `residue` — all derivable from any structure we hold, with nothing keyed to a
+preprocessed copy of anything. **This half is reproducible from the repo**; the only choice left is
+which pockets to pretrain on, which for this programme was always going to be our own data.
 
-**Its input is four fields, not an annotation.** `tasks/unimol_pocket.py` reads an LMDB of
-`pdbid`, `atoms`, `coordinates`, `residue`. Nothing keyed to a preprocessed copy of anything: a
-list of heavy atoms, their coordinates and their residue labels, which is derivable from any
-structure we hold. So unlike the pose task, **this one is reproducible from the repo**, and the only
-choice left to us is which pockets to pretrain on — which for this programme was always going to be
-our own data anyway.
-
-That makes Uni-Mol's standing here precise: its *finetuning* story is unreproducible and dropped,
-while its *pretraining* story is a published, complete, self-supervised recipe for a 99%-of-
-parameters encoder. The second is why the model is in the roster.
+So: the pose/finetuning path is dropped, the pretraining path is complete. The second is why this
+model is in the roster.
