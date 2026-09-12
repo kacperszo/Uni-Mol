@@ -11,9 +11,12 @@ benchmark score: it is a working example of the architecture this project is bui
 Image builds; the encoder contract is round-trip verified. No `predict` or `embed` capability
 yet — the adapter is not written.
 
-**Not a reproduction target.** Their published pose numbers cannot be reproduced from what is
-published; see below. This model is here as a pretrained encoder to transfer from, which is what
-made it interesting in the first place.
+**Not a reproduction target here**, and the reason is specific rather than sweeping: running their
+pose checkpoint needs a pocket annotation keyed to their own copy of CASF-2016, and applying it to
+the canonical structures would take a per-complex audit of the residue mapping. See below for what
+that was measured to be. This model is in the roster as a pretrained encoder to transfer from,
+which is what made it interesting in the first place — and its pocket *pretraining* recipe is
+fully reproducible from this repo.
 
 ## The encoder boundary, as its authors designed it
 
@@ -48,42 +51,57 @@ representation, pocket-pocket from the pocket's, the cross blocks left at zero �
 four-layer `TransformerEncoderWithPair` over the result. Nothing about the joining has to be
 invented.
 
-## Their published pose numbers cannot be reproduced from what is published
+## Running their pose checkpoint needs an annotation that does not transfer to our data
 
-Settled 2026-09-12, and it is the reason this model is a **training** target here rather than a
-reproduction one.
+Settled 2026-09-12. This is the reason Uni-Mol is a **training** target here rather than a
+reproduction one. The claim is deliberately narrower than the first version of this section, which
+over-reached from two samples and was corrected by measuring all 285 — see the end.
 
-Running `binding_pose_220908.pt` needs a pocket, and the pocket is not computed — it is read from
+Running `binding_pose_220908.pt` needs a pocket, and the pocket is not computed: it is read from
 `casf2016.pocket.json`, a per-complex list of `chain_id + residue_number` strings shipped in
-`CASF-2016.tar.gz` on their v0.1 release. Their own loader says as much: *"Currently not support
-parsing pdb and pocket info from local files."*
+`CASF-2016.tar.gz` on their v0.1 release. Their own loader is explicit about the limitation —
+*"Currently not support parsing pdb and pocket info from local files."*
 
-That json is keyed to **their** copy of CASF-2016, not to the canonical one, and the two are not
-the same files:
+**That annotation is keyed to their copy of the structures, and their copy is not ours.** Measured
+across all 285:
 
-| 4jia_protein.pdb | theirs | ours (official CASF) |
-|---|---|---|
-| first residue | `SER A 1` | `SER A 833` |
-| numbering | 1-300 | 833-1132 |
-| ATOM records | 4921 | 4878 |
-| first coordinate | 15.912, -56.379, -45.462 | 15.894, -56.369, -45.445 |
+| | |
+|---|---|
+| files with the same number of ATOM records as the canonical CASF file | **19 of 285** |
+| files whose first residue number differs from ours | **35 of 285** |
+| pockets that match **zero** residues when applied to canonical structures | **12 of 285** |
 
-So the residues were renumbered from 1, 43 atoms were added or kept that the canonical file does
-not have, and even the coordinates differ in the third decimal. Applied to the canonical
-structures, their annotation leaves **12 of 285 pockets with zero matching residues** — and the
-other 273 are worse than that, because a shifted numbering means `A47` in their file and `A47` in
-ours are simply different residues. Those 273 "successes" produce plausibly sized pockets made of
-the wrong atoms, which nothing downstream would report.
+So the annotation cannot be applied blindly. For the 12 it fails visibly; for the 35 whose
+numbering starts elsewhere it is suspect and would need checking one complex at a time; for the
+remaining 250 the numbering starts at the same residue and probably lines up, though a shared
+starting number does not by itself guarantee the same numbering throughout.
 
-**The data is published; the preprocessing that produced it is not.** Recovering it would mean
-reverse-engineering a residue mapping per complex — matchable by coordinates, since they agree to
-about 2e-2 A — and that is work on their bookkeeping rather than on the science. It is also a
-redistribution of CASF-2016, which PDBbind's terms do not provide for.
+Using it properly therefore means auditing the mapping per complex. That is a tractable job — and
+it is bookkeeping about their preprocessing rather than progress on the question this project is
+asking, so it was not done. We also cannot redistribute CASF-2016 ourselves, so their structures
+are not an option for this benchmark even where they would work: every other model here is scored
+on one canonical copy, and a model scored on a different one does not belong in the same table.
 
-So: **no reproduction of their docking numbers, and none claimed.** What stands is the part that
-does not depend on their preprocessing — the architecture, the two pretrained encoders, the
+**What stands**, because none of it depends on their preprocessing: the architecture, the way the
+two sides are joined (`models/docking_pose.py`, in this repo), both pretrained encoders, the
 dictionaries, and the encoder boundary their authors designed. We train the head ourselves, which
-was always the plan for this model, and our pocket selection is declared as ours.
+was always the plan, and our pocket selection is declared as ours.
+
+### Two claims withdrawn, and how
+
+The first version of this section said the residues were "renumbered from 1" and that coordinates
+"differ in the third decimal", and concluded that the 273 non-zero-overlap complexes were *worse*
+than the 12 because their pockets would be built from the wrong atoms. All three came from
+inspecting `4jia` and `2v7a`, which turned out to be in the 35-complex tail rather than typical.
+
+Measuring all 285: their first residue is 1 in only **82** of them, and matches ours in **250**.
+The coordinate claim came from comparing the first ATOM line of each file — one atom — and a
+proper comparison is confounded anyway, because the atom ordering differs between the two copies,
+which makes an element-wise difference meaningless (it reads 9 A at the median for the 19 files
+with matching atom counts).
+
+The conclusion survives; the reasoning for it did not. Worth keeping as a reminder that two
+samples out of 285 are a hypothesis.
 
 ## Hard-won facts (do NOT regress these)
 
