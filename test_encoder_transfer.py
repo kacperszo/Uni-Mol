@@ -1,14 +1,13 @@
 """Can Uni-Mol's encoder take a new head? The reference case, because the split is intended.
 
-IGN and PIGNet2 showed the contract works where the boundary had to be *inferred*. Uni-Mol is
-the model whose authors **designed** it: one encoder carrying 99% of the parameters, and three
-separate pretraining heads on top —
+Other models in this series needed the boundary inferred; Uni-Mol's authors **designed** it:
+one encoder carrying 99% of the parameters, and three separate pretraining heads on top —
 
     lm_head           masked atom-type prediction
     dist_head         pairwise distance prediction
     pair2coord_proj   coordinate denoising
 
-Three heads on one encoder is the shape the whole pretraining programme is aiming at, so this
+Three heads on one encoder is the shape a pretraining study is aiming at, so this
 is both a contract test and a look at what a good answer looks like.
 
 usage: python test_encoder_transfer.py --checkpoint /ckpt/mol_pre_no_h_220816.pt
@@ -16,11 +15,12 @@ usage: python test_encoder_transfer.py --checkpoint /ckpt/mol_pre_no_h_220816.pt
 
 import argparse
 import sys
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 
-sys.path.insert(0, "/work/unimol")
+sys.path.insert(0, str(Path(__file__).resolve().parent / "unimol"))
 
 HEADS = ["lm_head", "dist_head", "pair2coord_proj"]
 

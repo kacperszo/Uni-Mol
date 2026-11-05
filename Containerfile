@@ -1,6 +1,6 @@
 # Uni-Mol, CPU reference tier.
 #
-# The one already-pretrained encoder in the roster, and the reference for what an encoder /
+# An already-pretrained encoder, and the reference for what an encoder /
 # head boundary looks like when the authors designed it: 99% of parameters in the encoder,
 # three pretraining heads (masked atoms, distances, coordinate denoising) sitting on top.
 #

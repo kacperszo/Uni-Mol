@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 docs/
-figure/
-example_data/
-notebooks/
+**/figure/
+**/notebooks/
+# example LMDBs are ~31 MB; the dictionaries beside them are kept (the image needs them)
+**/example_data/**/*.lmdb

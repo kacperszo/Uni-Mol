@@ -3,11 +3,11 @@
 # Identical to `Containerfile` except for where torch comes from. The CPU tier installs it
 # from PyTorch's cpu index; here it comes from PyPI, whose torch 2.1.2 wheel *is* the cu121
 # build and carries its own nvidia runtime. That covers sm_86 natively and sm_89 by JIT, so
-# both the cluster A4000 and the local Ada card work.
+# both Ampere (sm_86) and Ada (sm_89) cards work.
 #
-# Nothing else may change. This image has to reproduce the CPU tier's recorded numbers
-# and its encoder-contract test
-# before it is trusted, so any library drift here would defeat the point of having two tiers.
+# The other installs are meant to match the CPU tier, but none of them (Uni-Core, rdkit, scipy,
+# pandas, ...) is version-pinned, so the two images agree only if built at about the same time.
+# Run the encoder-contract test in each before trusting either.
 FROM docker.io/library/python:3.10-slim
 
 ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1
