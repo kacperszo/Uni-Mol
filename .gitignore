@@ -137,3 +137,6 @@ dmypy.json
 #                                    of putting the two sides together
 weights/
 *.pt
+
+# local assistant settings: hold absolute paths from the machine they were written on
+.claude/
